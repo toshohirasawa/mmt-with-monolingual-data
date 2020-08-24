@@ -4,6 +4,7 @@ from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 from ...utils.data import sort_batch
 from .. import FF
+from ..embedding import get_embedding
 
 
 class TextEncoder(nn.Module):
@@ -48,8 +49,9 @@ class TextEncoder(nn.Module):
     def __init__(self, input_size, hidden_size, n_vocab, rnn_type,
                  num_layers=1, bidirectional=True,
                  dropout_rnn=0, dropout_emb=0, dropout_ctx=0,
-                 emb_maxnorm=None, emb_gradscale=False,
-                 proj_dim=None, proj_activ=None, layer_norm=False):
+                 emb_type='nn', emb_maxnorm=None, emb_gradscale=False,
+                 proj_dim=None, proj_activ=None, layer_norm=False,
+                 vocab=None, emb_model=None, emb_model_dim=None,):
         super().__init__()
 
         self.rnn_type = rnn_type.upper()
@@ -80,9 +82,15 @@ class TextEncoder(nn.Module):
         self.do_emb = nn.Dropout(self.dropout_emb)
 
         # Create embedding layer
-        self.emb = nn.Embedding(self.n_vocab, self.input_size,
-                                padding_idx=0, max_norm=self.emb_maxnorm,
-                                scale_grad_by_freq=self.emb_gradscale)
+        self.emb = get_embedding(emb_type)(
+            num_embeddings=self.n_vocab, 
+            embedding_dim=self.input_size,
+            padding_idx=0, 
+            max_norm=self.emb_maxnorm,
+            scale_grad_by_freq=self.emb_gradscale,
+            vocab=vocab,
+            model=emb_model,
+            model_dim=emb_model_dim)
 
         # Create fused/cudnn encoder according to the requested type
         RNN = getattr(nn, self.rnn_type)

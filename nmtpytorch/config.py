@@ -11,46 +11,51 @@ from configparser import ConfigParser, ExtendedInterpolation
 from ast import literal_eval
 
 
-TRAIN_DEFAULTS = {
-    'num_workers': 0,            # number of workers for data loading (0=disabled)
-    'pin_memory': False,         # pin_memory for DataLoader (Default: False)
-    'seed': 0,                   # > 0 if you want to reproduce a previous experiment
-    'gclip': 5.,                 # Clip gradients above clip_c
-    'l2_reg': 0.,                # L2 penalty factor
-    'patience': 20,              # Early stopping patience
-    'optimizer': 'adam',         # adadelta, sgd, rmsprop, adam
-    'lr': 0.0004,                # 0 -> Use default lr from Pytorch
-    'lr_decay': False,           # Can only be 'plateau' for now
-    'lr_decay_revert': False,    # Return back to the prev best weights after decay
-    'lr_decay_factor': 0.1,      # Check torch.optim.lr_scheduler
-    'lr_decay_patience': 10,     #
-    'lr_decay_min': 0.000001,    #
-    'model_type': '',            # Name of model class to train
-    'momentum': 0.0,             # momentum for SGD
-    'nesterov': False,           # Enable Nesterov for SGD
-    'disp_freq': 30,             # Training display frequency (/batch)
-    'batch_size': 32,            # Training batch size
-    'max_epochs': 100,           # Max number of epochs to train
-    'max_iterations': int(1e6),  # Max number of updates to train
-    'eval_metrics': 'loss',      # comma sep. metrics, 1st -> earlystopping
-    'eval_filters': '',          # comma sep. filters to apply to refs/hyps
-    'eval_beam': 6,              # Validation beam size
-    'eval_batch_size': 16,       # batch_size for beam-search
-    'eval_freq': 3000,           # 0 means 'End of epochs'
-    'eval_max_len': 200,         # max seq len to stop during beam search
-    'eval_start': 1,             # Epoch which validation will start
-    'eval_zero': False,          # Evaluate once before starting training
-                                 # Useful when using pretrained_file
-    'save_best_metrics': True,   # Save best models for each eval_metric
-    'save_path': '',             # Path to root experiment folder
-    'checkpoint_freq': 5000,     # Periodic checkpoint frequency
-    'n_checkpoints': 5,          # Number of checkpoints to keep
-    'tensorboard_dir': '',       # Enable TB and give global log folder
-    'pretrained_file': '',       # A .ckpt file from which layers will be initialized
-    'freeze_layers': '',         # comma sep. list of layer prefixes to freeze
-    'handle_oom': False,         # Skip out-of-memory batches
+TRAIN_DEFAULTS = {    'num_workers': 0,           # number of workers for data loading (0=disabled)
+    'pin_memory': False,        # pin_memory for DataLoader (Default: False)
+    'seed': 0,                  # > 0 if you want to reproduce a previous experiment
+    'gclip': 5.,                # Clip gradients above clip_c
+    'l2_reg': 0.,               # L2 penalty factor
+    'patience': 20,             # Early stopping patience
+    'optimizer': 'adam',        # adadelta, sgd, rmsprop, adam
+    'lr': 0.0004,               # 0 -> Use default lr from Pytorch
+    'lr_decay': False,          # Can only be 'plateau' for now
+    'lr_decay_revert': False,   # Return back to the prev best weights after decay
+    'lr_decay_factor': 0.1,     # Check torch.optim.lr_scheduler
+    'lr_decay_patience': 10,    #
+    'lr_decay_min': 0.000001,   #
+    'model_type': '',           # Name of model class to train
+    'momentum': 0.0,            # momentum for SGD
+    'nesterov': False,          # Enable Nesterov for SGD
+    'disp_freq': 30,            # Training display frequency (/batch)
+    'batch_size': 32,           # Training batch size
+    'max_epochs': 100,          # Max number of epochs to train
+    'max_iterations': int(1e6), # Max number of updates to train
+    'eval_metrics': 'loss',     # comma sep. metrics, 1st -> earlystopping
+    'eval_filters': '',         # comma sep. filters to apply to refs/hyps
+    'eval_beam': 6,             # Validation beam size
+    'eval_batch_size': 16,      # batch_size for beam-search
+    'eval_freq': 3000,          # 0 means 'End of epochs'
+    'eval_max_len': 200,        # max seq len to stop during beam search
+    'eval_start': 1,            # Epoch which validation will start
+    'eval_zero': False,         # Evaluate once before starting training
+                                # Useful when using pretrained_file
+    'save_best_metrics': True,  # Save best models for each eval_metric
+    'save_first': False,        # Save models prior to training
+    'save_path': '',            # Path to root experiment folder
+    'checkpoint_freq': 5000,    # Periodic checkpoint frequency
+    'n_checkpoints': 5,         # Number of checkpoints to keep
+    'tensorboard_dir': '',      # Enable TB and give global log folder
+    'pretrained_file': '',      # A .ckpt file from which layers will be initialized
+    'freeze_layers': '',        # comma sep. list of layer prefixes to freeze
+    'handle_oom': False,        # Skip out-of-memory batches
+    'exp_id': '',               # manually set experiment id
+    'warmup_steps': 4000,       # Adam for Transformer
+    'update_freq': 1,           # update frequency
+    # model initialization    
+    'enc_pretrained_emb': '',   #
+    'dec_pretrained_emb': '',   #
 }
-
 
 def expand_env_vars(data):
     """Interpolate some environment variables."""
@@ -67,7 +72,7 @@ def resolve_path(value):
     if isinstance(value, dict):
         return {k: resolve_path(v) for k, v in value.items()}
     if isinstance(value, str) and value.startswith(('~', '/', '../', './')):
-        return pathlib.Path(value).expanduser().resolve()
+        return pathlib.Path(value)
     return value
 
 
@@ -127,7 +132,10 @@ class Options:
             data = expand_env_vars(fhandle.read().strip())
 
         # Read the defaults first
-        self._parser.read_dict({'train': TRAIN_DEFAULTS})
+        self._parser.read_dict({
+            'train': TRAIN_DEFAULTS,
+            'pretrained_file': {},           # params for initialization
+        })
 
         # Read the config
         self._parser.read_string(data)

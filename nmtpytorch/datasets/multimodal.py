@@ -5,7 +5,7 @@ from torch.utils.data.sampler import BatchSampler, SequentialSampler, RandomSamp
 
 from . import get_dataset
 from .collate import get_collate
-from ..samplers import BucketBatchSampler, ApproximateBucketBatchSampler
+from ..samplers import BucketBatchSampler, ApproximateBucketBatchSampler, TokenBatchSampler
 
 logger = logging.getLogger('nmtpytorch')
 
@@ -34,7 +34,7 @@ class MultimodalDataset(Dataset):
     """
     def __init__(self, data, mode, batch_size, vocabs, topology,
                  bucket_by, bucket_order=None, max_len=None,
-                 sampler_type='bucket', **kwargs):
+                 sampler_type='bucket', n_feats=None, **kwargs):
         self.datasets = {}
         self.mode = mode
         self.vocabs = vocabs
@@ -70,7 +70,10 @@ class MultimodalDataset(Dataset):
             logger.info("Initializing dataset for '{}'".format(ds))
             self.datasets[ds] = dataset_constructor(
                 fname=data[key],
-                vocab=vocabs.get(key, None), bos=ds.trg, **kwargs)
+                vocab=vocabs.get(key, None), 
+                bos=ds.trg, 
+                n_feats=n_feats,
+                **kwargs)
 
         # Detect dataset sizes
         sizes = set([len(dataset) for dataset in self.datasets.values()])
@@ -87,6 +90,8 @@ class MultimodalDataset(Dataset):
                 gen_sampler = ApproximateBucketBatchSampler
             elif self.sampler_type == 'bucket':
                 gen_sampler = BucketBatchSampler
+            elif self.sampler_type == 'token':
+                gen_sampler = TokenBatchSampler
             self.sort_lens = self.datasets[self.bucket_by].lengths
             self.sampler = gen_sampler(
                 batch_size=self.batch_size,

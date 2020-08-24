@@ -22,7 +22,7 @@ class NumpyDataset(Dataset):
             for adversarial/incongruent experiments during test-time.
     """
 
-    def __init__(self, fname, key=None, order_file=None, revert=False, **kwargs):
+    def __init__(self, fname, key=None, order_file=None, revert=False, n_feats=None, **kwargs):
         self.path = Path(fname)
         if not self.path.exists():
             raise RuntimeError('{} does not exist.'.format(self.path))
@@ -32,6 +32,11 @@ class NumpyDataset(Dataset):
         elif self.path.suffix == '.npz':
             assert key, "A key should be provided for .npz files."
             self.data = np.load(self.path)[key]
+
+        self.n_feats = n_feats
+        if self.n_feats:
+            assert self.data.shape[-1] >= self.n_feats
+            self.data = self.data[:, :, :self.n_feats]
 
         if order_file:
             with open(order_file) as orf:

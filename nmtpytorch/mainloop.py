@@ -3,6 +3,7 @@ import time
 import logging
 
 import torch
+import numpy as np
 
 from .evaluator import Evaluator
 from .optimizer import Optimizer
@@ -18,8 +19,9 @@ logger = logging.getLogger('nmtpytorch')
 
 
 class MainLoop:
-    def __init__(self, model, train_opts, dev_mgr):
+    def __init__(self, model: torch.nn.Module, opts, dev_mgr):
         # Get all training options into this mainloop
+        train_opts = opts.train
         self.__dict__.update(train_opts)
 
         self.print = logger.info
@@ -28,6 +30,8 @@ class MainLoop:
         self.epoch_valid = (self.eval_freq == 0)
         self.oom_count = 0
         self.loss_meter = Loss()
+        self.cum_loss = []
+        self.cum_aux_loss = []
 
         # Load training and validation data & create iterators
         self.print('Loading dataset(s)')
@@ -40,6 +44,7 @@ class MainLoop:
                                self.model, logger, self.patience,
                                self.eval_metrics,
                                save_best_metrics=self.save_best_metrics,
+                               save_first=self.save_first,
                                n_checkpoints=self.n_checkpoints)
 
         # If a validation set exists
@@ -66,11 +71,26 @@ class MainLoop:
         ################################################
         if train_opts['pretrained_file']:
             # Relax the strict condition for partial initialization
-            weights, _, _ = load_pt_file(train_opts['pretrained_file'])
+            weights, _, pretrained_opts = load_pt_file(train_opts['pretrained_file'])
+            
+            update_state_dict = getattr(model, 'update_state_dict', None)
+            if update_state_dict:
+                weights = update_state_dict(weights, pretrained_opts['train']['model_type'])
+
             for name in get_module_groups(weights.keys()):
                 self.print(
                     ' -> will initialize {}.* with pretrained weights.'.format(name))
             model.load_state_dict(weights, strict=False)
+
+        ## individual weight files - np data of same shape with the target weight
+        if len(opts.pretrained_file) > 0:
+            for name, fname in opts.pretrained_file.items():
+                self.print(
+                    f' -> will initialize {name} with pretrained weights ({fname}).')
+            model.load_state_dict(
+                {k: torch.Tensor(np.load(v)) for k, v in opts.pretrained_file.items()},
+                 strict=False
+            )
 
         ############################
         # Freeze layers if requested
@@ -139,21 +159,34 @@ class MainLoop:
             # them with scalar weights
             loss = sum([out[k]['loss'] / out[k]['n_items'] for k in out]) / len(out)
 
-        # Add other losses if any
+        self.cum_loss.append(loss)
         if self.net.aux_loss:
-            loss += sum(list(self.net.aux_loss.values()))
+            self.cum_aux_loss.append(sum(self.net.aux_loss.values()))
 
-        # Backward pass
-        loss.backward()
+        if self.monitor.uctr % self.update_freq == 0:
+            # Backward: prevent loss be freed before backwarding all loss
+            (
+                sum(self.cum_loss)/len(self.cum_loss) +
+                (sum(self.cum_aux_loss)/len(self.cum_aux_loss) if self.cum_aux_loss else 0)
+            ).backward()
 
-        # Update parameters (includes gradient clipping logic)
-        self.optim.step()
+            # Update parameters (includes gradient clipping logic)
+            self.optim.step()
+
+            # clear cumulative loss
+            self.cum_loss = []
+            self.cum_aux_loss = []
 
         return time.time() - nn_start
 
     def train_epoch(self):
         """Trains a full epoch."""
         self.print('Starting Epoch {}'.format(self.monitor.ectr))
+
+        # ectr starts from 1
+        if self.monitor.ectr == 1 and self.save_first:
+            self.print('Saving unchanged checkpoint...')
+            self.monitor.save_model(suffix='update0')
 
         nn_sec = 0.0
         eval_sec = 0.0

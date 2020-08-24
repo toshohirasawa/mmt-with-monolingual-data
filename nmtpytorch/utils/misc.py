@@ -63,7 +63,7 @@ def pbar(iterator, unit='it'):
 
 def load_pt_file(fname, device='cpu'):
     """Returns saved .(ck)pt file fields."""
-    fname = str(pathlib.Path(fname).expanduser())
+    fname = str(pathlib.Path(fname).expanduser().resolve())
     data = torch.load(fname, map_location=device)
     if 'history' not in data:
         data['history'] = {}
@@ -102,7 +102,7 @@ def fopen(filename, key=None):
     """gzip,bzip2,xz,numpy aware file opening function."""
     assert '*' not in str(filename), "Glob patterns not supported in fopen()"
 
-    filename = str(pathlib.Path(filename).expanduser())
+    filename = str(pathlib.Path(filename).expanduser().resolve())
     if filename.endswith('.gz'):
         return gzip.open(filename, 'rt')
     elif filename.endswith('.bz2'):
@@ -181,81 +181,23 @@ def setup_experiment(opts, suffix=None, short=False):
 
     # add suffix to subfolder name to keep experiment names shorter
     if suffix:
-        opts.train['subfolder'] += "-{}".format(suffix)
+        opts.train['subfolder'] += "{}".format(suffix)
 
     # Create folders
     folder = pathlib.Path(opts.train['save_path']) / opts.train['subfolder']
     folder.mkdir(parents=True, exist_ok=True)
 
     # Set random experiment ID
-    run_id = time.strftime('%Y%m%d%H%m%S') + str(random.random())
-    run_id = sha256(run_id.encode('ascii')).hexdigest()[:5]
+    if not opts.train['exp_id']:
+        run_id = time.strftime('%Y%m%d%H%m%S') + str(random.random())
+        run_id = sha256(run_id.encode('ascii')).hexdigest()[:5]
+        # Finalize
+        opts.train['exp_id'] = 'r{}'.format(run_id)
 
-    names = []
-
-    mopts = opts.model.copy()
-
-    # Start with general ones
-    if 'enc_type' in mopts:
-        names.append("enc%d%s%d" % (mopts.get('n_encoders', 1),
-                                    mopts['enc_type'].upper(),
-                                    mopts.pop('enc_dim')))
-    if 'dec_type' in mopts:
-        names.append("dec%d%s%d" % (mopts.get('n_decoders', 1),
-                                    mopts['dec_type'].upper(),
-                                    mopts.pop('dec_dim')))
-    for k in sorted(mopts):
-        if k.endswith("_dim"):
-            names.append('%s%d' % (k.split('_')[0], mopts[k]))
-
-    # Append optimizer and learning rate
-    names.append('%s_%.e' % (opts.train['optimizer'], opts.train['lr']))
-
-    if opts.train['l2_reg'] > 0:
-        names.append('l2_%.e' % opts.train['l2_reg'])
-
-    # Dropout parameter names can be different for each model
-    dropouts = sorted([opt for opt in mopts if opt.startswith('dropout')])
-    for dout in dropouts:
-        if mopts[dout] > 0:
-            parts = dout.split('_')
-            if len(parts) == 2:
-                names.append("do_%s_%.1f" % (parts[1], mopts[dout]))
-            else:
-                names.append("do%.1f" % mopts[dout])
-
-    # If short names requested, we stop here
-    if short:
-        name = "-".join(names)
-        opts.train['exp_id'] = '%s-r%s' % (name, run_id)
-        return
-
-    # Continue with other stuff
-    if 'att_type' in mopts:
-        names.append('att_{}'.format(mopts['att_type']))
-
-    if 'fusion_type' in mopts:
-        names.append('ctx_{}'.format(mopts['fusion_type']))
-
-    # Append batch size
-    names.append('bs{}'.format(opts.train['batch_size']))
-
-    # Validation stuff (first: early-stop metric)
-    names.append(opts.train['eval_metrics'].split(',')[0])
-
-    if opts.train['eval_freq'] > 0:
-        names.append("each{}".format(opts.train['eval_freq']))
-    else:
-        names.append("eachepoch")
-
-    # FIXME: We can't add everything to here so maybe we
-    # need to let models to append their custom fields afterwards
-    if mopts.get('tied_emb', False):
-        names.append("{}tied".format(mopts['tied_emb']))
-
-    if mopts.get('dec_init', False):
-        names.append("di_{}".format(mopts['dec_init'].replace('_', '')))
-
-    # Finalize
-    opts.train['exp_id'] = '{}-{}-r{}'.format(
-        opts.train['model_type'].lower(), "-".join(names), run_id)
+def get_feat_mask(feat_data):
+    '''return element-wise mask in shape of (BxT)
+        1: actual data
+        0: padding data (=0.)
+    '''
+    feat_mask = (feat_data != 0.).any(dim=-1)
+    return feat_mask.long()

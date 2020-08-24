@@ -4,6 +4,7 @@ import logging
 import torch.optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.utils import clip_grad_norm_
+from .utils.transformer import TransformerAdam
 
 logger = logging.getLogger('nmtpytorch')
 
@@ -20,13 +21,14 @@ logger = logging.getLogger('nmtpytorch')
 class Optimizer:
     # Class dict to map lowercase identifiers to actual classes
     methods = {
-        'adadelta':   torch.optim.Adadelta,
-        'adagrad':    torch.optim.Adagrad,
-        'adam':       torch.optim.Adam,
-        'sgd':        torch.optim.SGD,
-        'asgd':       torch.optim.ASGD,
-        'rprop':      torch.optim.Rprop,
-        'rmsprop':    torch.optim.RMSprop,
+        'adadelta':    torch.optim.Adadelta,
+        'adagrad':     torch.optim.Adagrad,
+        'adam':        torch.optim.Adam,
+        'sgd':         torch.optim.SGD,
+        'asgd':        torch.optim.ASGD,
+        'rprop':       torch.optim.Rprop,
+        'rmsprop':     torch.optim.RMSprop,
+        'transformer': TransformerAdam,
     }
 
     @staticmethod
@@ -60,6 +62,8 @@ class Optimizer:
         if self.name == 'sgd':
             self.optim_args['momentum'] = self.momentum
             self.optim_args['nesterov'] = self.nesterov
+        if self.name == 'transformer':
+            self.optim_args['warmup_steps'] = self.model.opts.train['warmup_steps']
 
         # Get all parameters that require grads
         self.named_params = self.get_params(self.model)

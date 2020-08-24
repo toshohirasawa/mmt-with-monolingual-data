@@ -55,7 +55,7 @@ class TensorBoard:
             self.available = True
 
             # Construct full folder path
-            self.log_dir = pathlib.Path(self.log_dir).expanduser()
+            self.log_dir = pathlib.Path(self.log_dir).expanduser().resolve()
             self.log_dir = self.log_dir / self.subfolder / self.exp_id
             self.log_dir.mkdir(parents=True, exist_ok=True)
 

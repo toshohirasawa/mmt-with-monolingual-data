@@ -23,9 +23,12 @@ class NMT(nn.Module):
 
     def set_defaults(self):
         self.defaults = {
+            'emb_type': 'nn',
             'emb_dim': 128,             # Source and target embedding sizes
             'emb_maxnorm': None,        # Normalize embeddings l2 norm to 1
             'emb_gradscale': False,     # Scale embedding gradients w.r.t. batch frequency
+            'emb_model': None,
+            'emb_model_dim': None,
             'enc_dim': 256,             # Encoder hidden size
             'enc_type': 'gru',          # Encoder type (gru|lstm)
             'enc_lnorm': False,         # Add layer-normalization to encoder output
@@ -58,6 +61,12 @@ class NMT(nn.Module):
             'bos_type': 'emb',          # 'emb': default learned emb
             'bos_activ': None,          #
             'bos_dim': None,            #
+            # output layer
+            'out_type': 'distribution', # or embedding
+            'loss_margin': 0.5,         # margin for max-margin loss
+            # visual-aware models
+            'feat_name': 'feats',
+            'feat_dim': 2048,
         }
 
     def __init__(self, opts):
@@ -75,6 +84,7 @@ class NMT(nn.Module):
 
         # Setup options
         self.opts.model = self.set_model_options(opts.model)
+        self.feat_name = self.opts.model['feat_name']
 
         # Parse topology & languages
         self.topology = Topology(self.opts.model['direction'])
@@ -134,8 +144,9 @@ class NMT(nn.Module):
             if param.requires_grad and param.dim() > 1:
                 nn.init.kaiming_normal_(param.data)
         # Reset padding embedding to 0
-        with torch.no_grad():
-            self.enc.emb.weight.data[0].fill_(0)
+        if hasattr(self.enc.emb, 'weight'):
+            with torch.no_grad():
+                self.enc.emb.weight.data[0].fill_(0)
 
     def setup(self, is_train=True):
         """Sets up NN topology by creating the layers."""
@@ -151,9 +162,13 @@ class NMT(nn.Module):
             dropout_ctx=self.opts.model['dropout_ctx'],
             dropout_rnn=self.opts.model['dropout_enc'],
             num_layers=self.opts.model['n_encoders'],
+            emb_type=self.opts.model['emb_type'],
             emb_maxnorm=self.opts.model['emb_maxnorm'],
             emb_gradscale=self.opts.model['emb_gradscale'],
-            layer_norm=self.opts.model['enc_lnorm'])
+            emb_model=self.opts.model['emb_model'],
+            emb_model_dim=self.opts.model['emb_model_dim'],
+            layer_norm=self.opts.model['enc_lnorm'],
+            vocab=self.src_vocab,)
 
         ################
         # Create Decoder
@@ -182,7 +197,9 @@ class NMT(nn.Module):
             sched_sample=self.opts.model['sched_sampling'],
             bos_type=self.opts.model['bos_type'],
             bos_dim=self.opts.model['bos_dim'],
-            bos_activ=self.opts.model['bos_activ'])
+            bos_activ=self.opts.model['bos_activ'],
+            out_type=self.opts.model['out_type'],
+            loss_margin=self.opts.model['loss_margin'])
 
         # Share encoder and decoder weights
         if self.opts.model['tied_emb'] == '3way':
@@ -220,8 +237,8 @@ class NMT(nn.Module):
                 if the relevant modality does not require a mask.
         """
         d = {str(self.sl): self.enc(batch[self.sl])}
-        if 'feats' in batch:
-            d['feats'] = (batch['feats'], None)
+        if self.feat_name in batch:
+            d[self.feat_name] = (batch[self.feat_name], None)
         return d
 
     def forward(self, batch, **kwargs):
@@ -256,3 +273,9 @@ class NMT(nn.Module):
     def get_decoder(self, task_id=None):
         """Compatibility function for multi-tasking architectures."""
         return self.dec
+
+    def get_enc_emb(self):
+        return self.enc.emb
+    
+    def get_dec_emb(self):
+        return self.dec.emb

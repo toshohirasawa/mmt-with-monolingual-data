@@ -23,7 +23,7 @@ class Monitor:
 
     def __init__(self, save_path, exp_id,
                  model, logger, patience, eval_metrics, history=None,
-                 save_best_metrics=False, n_checkpoints=0):
+                 save_best_metrics=False, save_first=False, n_checkpoints=0):
         self.print = logger.info
         self.save_path = save_path
         self.exp_id = exp_id
@@ -31,6 +31,7 @@ class Monitor:
         self.patience = patience
         self.eval_metrics = eval_metrics.upper().split(',')
         self.save_best_metrics = save_best_metrics
+        self.save_first = save_first
         self.checkpoints = FileRotator(n_checkpoints)
         self.beam_metrics = None
 

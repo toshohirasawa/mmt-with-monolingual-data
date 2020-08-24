@@ -16,7 +16,7 @@ class Vocabulary:
               "<unk>": 3}
 
     def __init__(self, vocab, name):
-        self.vocab = pathlib.Path(vocab).expanduser()
+        self.vocab = pathlib.Path(vocab).expanduser().resolve()
         self.name = name
         self._map = None
         self._imap = None
@@ -64,6 +64,9 @@ class Vocabulary:
 
     def __len__(self):
         return len(self._map)
+
+    def tokens(self):
+        return list(self._map.keys())
 
     def sent_to_idxs(self, line, explicit_bos=False, explicit_eos=True):
         """Convert from list of strings to list of token indices."""

@@ -19,6 +19,16 @@ from .multimodal_asr import MultimodalASR
 from .multitask import Multitask
 from .multitask_att import MultitaskAtt
 
+from .imagination import Imagination
+from .seq_imagination import SequentialImagination
+from .vag import VisualAttentionGrounding
+from .transformer import Transformer
+from .imagination_transformer import ImaginationTransformer
+from .seq_imagination_transformer import SequentialImaginationTransformer
+from .am_transformer import AttentiveMultimodalTransformer
+from .multitask_transformer import MultitaskTransformer
+from .multitask_am_transformer import MultitaskAttentiveMultimodalTransformer
+
 ##########################################
 # Backward-compatibility with older models
 ##########################################

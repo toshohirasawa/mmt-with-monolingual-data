@@ -1,9 +1,13 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*
+import logging
 import subprocess
 import pkg_resources
 
 from ..utils.misc import listify
 from .metric import Metric
+from time import sleep
+
+logger = logging.getLogger('nmtpytorch')
 
 BLEU_SCRIPT = pkg_resources.resource_filename('nmtpytorch',
                                               'lib/multi-bleu.perl')
@@ -16,7 +20,8 @@ class BLEUScorer:
         # while the candidate translations are read from stdin.
         self.__cmdline = [BLEU_SCRIPT]
 
-    def compute(self, refs, hyps, language=None, lowercase=False):
+    def compute(self, refs, hyps, language=None, lowercase=False,
+                n_retry=5):
         cmdline = self.__cmdline[:]
 
         if lowercase:
@@ -30,9 +35,20 @@ class BLEUScorer:
         elif isinstance(hyps, list):
             hypstring = "\n".join(hyps)
 
-        score = subprocess.run(cmdline, stdout=subprocess.PIPE,
-                               input=hypstring,
-                               universal_newlines=True).stdout.splitlines()
+        #
+        for _ in range(n_retry):
+            try:
+                score = subprocess.run(cmdline, 
+                    stdout=subprocess.PIPE,
+                    input=hypstring,
+                    universal_newlines=True).stdout.splitlines()
+                err = None
+            except Exception as _e:
+                # OSError: [Errno 12] Cannot allocate memory
+                err = _e
+        else:
+            if err is not None:
+                raise err
 
         if len(score) == 0:
             return Metric('BLEU', 0, "0.0")

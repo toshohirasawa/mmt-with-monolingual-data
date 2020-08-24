@@ -9,7 +9,8 @@ import torch.nn.functional as F
 from ...utils.nn import get_rnn_hidden_state
 from .. import FF
 from ..attention import get_attention
-
+from ..embedding import EmbeddingOutput
+from ..max_margin import MaxMarginForEmbeddingPrediction
 
 class ConditionalDecoder(nn.Module):
     """A conditional decoder with attention à la dl4mt-tutorial."""
@@ -19,11 +20,13 @@ class ConditionalDecoder(nn.Module):
                  att_activ='tanh', att_bottleneck='ctx', att_temp=1.0,
                  transform_ctx=True, mlp_bias=False, dropout_out=0,
                  emb_maxnorm=None, emb_gradscale=False, sched_sample=0,
-                 bos_type='emb', bos_dim=None, bos_activ=None, bos_bias=False):
+                 bos_type='emb', bos_dim=None, bos_activ=None, bos_bias=False,
+                 out_type='distribution', loss_margin=0.1):
         super().__init__()
 
         # Normalize case
         self.rnn_type = rnn_type.upper()
+        self.out_type = out_type.lower()
 
         # Safety checks
         assert self.rnn_type in ('GRU', 'LSTM'), \
@@ -31,6 +34,7 @@ class ConditionalDecoder(nn.Module):
         assert bos_type in ('emb', 'feats', 'zero'), "Unknown bos_type"
         assert dec_init.startswith(('zero', 'feats', 'mean_ctx', 'max_ctx', 'last_ctx')), \
             "dec_init '{}' not known".format(dec_init)
+        assert self.out_type in ('distribution', 'embedding'), "Unknown out_type"
 
         RNN = getattr(nn, '{}Cell'.format(self.rnn_type))
         # LSTMs have also the cell state
@@ -117,13 +121,16 @@ class ConditionalDecoder(nn.Module):
                           bias_zero=True, activ='tanh')
 
         # Final softmax
-        self.out2prob = FF(self.input_size, self.n_vocab)
+        if self.out_type == 'distribution':
+            self.out2prob = FF(self.input_size, self.n_vocab)
+            self.prob2loss = nn.NLLLoss(reduction="sum", ignore_index=0)
+        elif self.out_type == 'embedding':
+            self.out2prob = EmbeddingOutput(self.n_vocab, self.input_size)
+            self.prob2loss = MaxMarginForEmbeddingPrediction(margin=loss_margin)
 
         # Tie input embedding matrix and output embedding matrix
         if self.tied_emb:
             self.out2prob.weight = self.emb.weight
-
-        self.nll_loss = nn.NLLLoss(reduction="sum", ignore_index=0)
 
     def _lstm_pack_states(self, h):
         """Pack LSTM hidden and cell state."""
@@ -245,12 +252,12 @@ class ConditionalDecoder(nn.Module):
         # Skip <bos> now
         bos = self.get_emb(y[0], 0)
         log_p, h = self.f_next(ctx_dict, bos, h)
-        loss += self.nll_loss(log_p, y[1])
+        loss += self.prob2loss(log_p, y[1])
         y_emb = self.emb(y[1:])
 
         for t in range(y_emb.shape[0] - 1):
             emb = self.emb(log_p.argmax(1)) if sched else y_emb[t]
             log_p, h = self.f_next(ctx_dict, emb, h)
-            loss += self.nll_loss(log_p, y[t + 2])
+            loss += self.prob2loss(log_p, y[t + 2])
 
         return {'loss': loss}

@@ -45,9 +45,11 @@ setuptools.setup(
     python_requires='~=3.6',
     install_requires=[
         'numpy', 'scipy', 'scikit-learn', 'tqdm', 'pillow',
-        'torch==1.0.0', 'torchvision==0.2.1',
+        'torch==1.3.1', 'torchvision==0.2.1',
         'sacrebleu>=1.2.9', 'tensorboardX==1.1',
         'editdistance==0.4', 'subword_nmt==0.3.5',
+        'sklearn', 'fasttext==0.9.2', 'gensim==3.8.3',
+        'transformers==3.5.0'
     ],
     include_package_data=True,
     exclude_package_data={'': ['.git']},

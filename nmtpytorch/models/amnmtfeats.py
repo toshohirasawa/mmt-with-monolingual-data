@@ -45,8 +45,13 @@ class AttentiveMNMTFeatures(NMT):
             dropout_ctx=self.opts.model['dropout_ctx'],
             dropout_rnn=self.opts.model['dropout_enc'],
             num_layers=self.opts.model['n_encoders'],
+            emb_type=self.opts.model['emb_type'],
             emb_maxnorm=self.opts.model['emb_maxnorm'],
-            emb_gradscale=self.opts.model['emb_gradscale'])
+            emb_gradscale=self.opts.model['emb_gradscale'],
+            emb_model=self.opts.model['emb_model'],
+            emb_model_dim=self.opts.model['emb_model_dim'],
+            layer_norm=self.opts.model['enc_lnorm'],
+            vocab=self.src_vocab,)
 
         # Create Decoder
         self.dec = ConditionalMMDecoder(
@@ -108,3 +113,9 @@ class AttentiveMNMTFeatures(NMT):
                 self.opts.model['alpha_c'])
 
         return result
+    
+    def get_enc_emb(self):
+        return self.enc.emb
+    
+    def get_dec_emb(self):
+        return self.dec.emb

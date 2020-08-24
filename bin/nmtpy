@@ -143,11 +143,12 @@ if __name__ == '__main__':
     else:
         opts.train['seed'] = fix_seed()
 
-    # Be verbose and fire the loop!
-    log.info(opts)
-
     # Instantiate the model object
     model = getattr(models, opts.train['model_type'])(opts=opts)
+
+    # Be verbose and fire the loop!
+    # Output all hyper-parameters
+    log.info(model.opts)
 
     log.info("Python {} -- torch {} with CUDA {} (on machine '{}')".format(
         platform.python_version(), torch.__version__,
@@ -158,6 +159,6 @@ if __name__ == '__main__':
 
     if 'SLURM_JOB_ID' in os.environ:
         log.info("SLURM Job ID: {}".format(os.environ['SLURM_JOB_ID']))
-    loop = MainLoop(model, opts.train, dev_mgr)
+    loop = MainLoop(model, opts, dev_mgr)
     loop()
     sys.exit(0)
